@@ -15,10 +15,18 @@ interface MeResponse {
   email: string;
 }
 
+interface MyLeague {
+  code: string;
+  name: string;
+  status: string;
+  isAdmin: boolean;
+}
+
 export default function HomePage() {
   const router = useRouter();
   const { loading: authLoading, user, token, signOut } = useSupabaseAuth();
   const [me, setMe] = useState<MeResponse | null>(null);
+  const [myLeagues, setMyLeagues] = useState<MyLeague[] | null>(null);
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -26,11 +34,15 @@ export default function HomePage() {
   useEffect(() => {
     if (!token) {
       setMe(null);
+      setMyLeagues(null);
       return;
     }
     apiFetch<MeResponse>("/api/me", { token })
       .then(setMe)
       .catch(() => setMe(null));
+    apiFetch<{ leagues: MyLeague[] }>("/api/leagues/mine", { token })
+      .then((res) => setMyLeagues(res.leagues))
+      .catch(() => setMyLeagues([]));
   }, [token]);
 
   async function handleJoin(e: React.FormEvent) {
@@ -99,8 +111,36 @@ export default function HomePage() {
           </p>
         </div>
 
+        {myLeagues && myLeagues.length > 0 && (
+          <Card className="p-6 space-y-3">
+            <h2 className="font-bold text-lg">Le tue leghe</h2>
+            <div className="space-y-1.5">
+              {myLeagues.map((l) => (
+                <div key={l.code} className="flex items-center gap-2 text-sm border border-slate-800 rounded-lg px-3 py-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold truncate">{l.name}</p>
+                    <p className="text-xs text-slate-500 font-mono">{l.code} · {l.status}</p>
+                  </div>
+                  <Link href={`/league/${l.code}/dashboard`}>
+                    <Button size="sm" variant="secondary">
+                      Entra
+                    </Button>
+                  </Link>
+                  {l.isAdmin && (
+                    <Link href={`/league/${l.code}/admin`}>
+                      <Button size="sm" variant="ghost">
+                        Admin
+                      </Button>
+                    </Link>
+                  )}
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+
         <Card className="p-6 space-y-4">
-          <h2 className="font-bold text-lg">Entra in una lega</h2>
+          <h2 className="font-bold text-lg">Entra in una nuova lega</h2>
           <form onSubmit={handleJoin} className="space-y-3">
             <Input
               label="Codice lega"
@@ -158,7 +198,7 @@ function messageFor(code: string): string {
     case "LEAGUE_FULL":
       return "La lega ha già raggiunto il numero massimo di partecipanti.";
     case "LEAGUE_NOT_JOINABLE":
-      return "L'asta è già iniziata: chiedi all'admin di aggiungerti manualmente.";
+      return "Questa lega non accetta più nuovi partecipanti.";
     default:
       return "Non è stato possibile completare l'operazione.";
   }

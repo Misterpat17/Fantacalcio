@@ -21,10 +21,14 @@ export default function UtentiPage() {
   const router = useRouter();
   const { loading: authLoading, user, token } = useSupabaseAuth();
   const [users, setUsers] = useState<UserRow[] | null>(null);
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null);
   const [forbidden, setForbidden] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const [newName, setNewName] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [newPassword, setNewPassword] = useState("");
 
   const refresh = useCallback(async () => {
     if (!token) return;
@@ -59,6 +63,26 @@ export default function UtentiPage() {
     }
   }
 
+  async function handleCreate(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newName.trim() || !newEmail.trim() || newPassword.length < 6) {
+      setFeedback({ ok: false, text: "Compila nome, email e una password di almeno 6 caratteri." });
+      return;
+    }
+    await run(
+      () =>
+        apiFetch("/api/admin/users", {
+          method: "POST",
+          token,
+          body: { displayName: newName.trim(), email: newEmail.trim(), password: newPassword },
+        }),
+      "Utente creato."
+    );
+    setNewName("");
+    setNewEmail("");
+    setNewPassword("");
+  }
+
   if (authLoading || !user) {
     return <main className="flex-1 flex items-center justify-center text-slate-400">Caricamento...</main>;
   }
@@ -83,9 +107,8 @@ export default function UtentiPage() {
           </Link>
           <h1 className="text-2xl font-black mt-2">Utenti registrati</h1>
           <p className="text-slate-400 text-sm mt-1">
-            Elenco di tutti gli account. Rinominarli qui cambia il nome visualizzato di default (una lega può comunque
-            avere un nome personalizzato per quella lega). Eliminare un account lo rimuove anche da tutte le leghe a cui
-            partecipa.
+            Crea account per conto di altri, modifica nome/email/password, o elimina un account (lo rimuove anche da
+            tutte le leghe a cui partecipa).
           </p>
         </div>
 
@@ -96,56 +119,108 @@ export default function UtentiPage() {
         )}
 
         <Card className="p-5 space-y-3">
+          <h2 className="font-bold text-slate-200">Crea nuovo utente</h2>
+          <form onSubmit={handleCreate} className="grid sm:grid-cols-3 gap-2">
+            <Input placeholder="Nome" value={newName} onChange={(e) => setNewName(e.target.value)} />
+            <Input placeholder="Email" type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} />
+            <Input placeholder="Password (min. 6)" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+            <Button type="submit" size="sm" disabled={busy} className="sm:col-span-3">
+              Crea utente
+            </Button>
+          </form>
+        </Card>
+
+        <Card className="p-5 space-y-3">
           {users === null && <p className="text-sm text-slate-500">Caricamento...</p>}
           {users?.length === 0 && <p className="text-sm text-slate-500">Nessun utente registrato.</p>}
-          {users?.map((u) => {
-            const draft = drafts[u.id] ?? u.display_name;
-            const changed = draft.trim() !== "" && draft.trim() !== u.display_name;
-            return (
-              <div key={u.id} className="flex items-center gap-2 text-sm border border-slate-800 rounded-lg px-3 py-2">
-                <div className="flex-1 min-w-0">
-                  <Input
-                    className="px-2 py-1"
-                    value={draft}
-                    onChange={(e) => setDrafts((prev) => ({ ...prev, [u.id]: e.target.value }))}
-                  />
-                  <p className="text-xs text-slate-500 truncate mt-1">
-                    {u.email} {u.is_admin && <span className="text-sky-400 font-semibold">· amministratore</span>}
-                  </p>
-                </div>
-                {changed && (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    disabled={busy}
-                    onClick={() =>
-                      run(
-                        () => apiFetch(`/api/admin/users/${u.id}`, { method: "PATCH", token, body: { displayName: draft.trim() } }),
-                        "Nome aggiornato."
-                      )
-                    }
-                  >
-                    Salva
-                  </Button>
-                )}
-                {!u.is_admin && (
-                  <Button
-                    size="sm"
-                    variant="danger"
-                    disabled={busy}
-                    onClick={() => {
-                      if (!confirm(`Eliminare definitivamente l'account di ${u.display_name}? Verrà rimosso da tutte le leghe.`)) return;
-                      run(() => apiFetch(`/api/admin/users/${u.id}`, { method: "DELETE", token }), "Account eliminato.");
-                    }}
-                  >
-                    Elimina
-                  </Button>
-                )}
-              </div>
-            );
-          })}
+          {users?.map((u) => (
+            <UserRowItem
+              key={u.id}
+              user={u}
+              busy={busy}
+              editing={editingId === u.id}
+              onToggleEdit={() => setEditingId(editingId === u.id ? null : u.id)}
+              onSave={(patch) =>
+                run(() => apiFetch(`/api/admin/users/${u.id}`, { method: "PATCH", token, body: patch }), "Utente aggiornato.").then(
+                  () => setEditingId(null)
+                )
+              }
+              onDelete={() => {
+                if (!confirm(`Eliminare definitivamente l'account di ${u.display_name}? Verrà rimosso da tutte le leghe.`)) return;
+                run(() => apiFetch(`/api/admin/users/${u.id}`, { method: "DELETE", token }), "Account eliminato.");
+              }}
+            />
+          ))}
         </Card>
       </div>
     </main>
+  );
+}
+
+function UserRowItem({
+  user,
+  busy,
+  editing,
+  onToggleEdit,
+  onSave,
+  onDelete,
+}: {
+  user: UserRow;
+  busy: boolean;
+  editing: boolean;
+  onToggleEdit: () => void;
+  onSave: (patch: { displayName?: string; email?: string; password?: string }) => void;
+  onDelete: () => void;
+}) {
+  const [name, setName] = useState(user.display_name);
+  const [email, setEmail] = useState(user.email);
+  const [password, setPassword] = useState("");
+
+  return (
+    <div className="border border-slate-800 rounded-lg px-3 py-2 text-sm space-y-2">
+      <div className="flex items-center gap-2">
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold truncate">{user.display_name}</p>
+          <p className="text-xs text-slate-500 truncate">
+            {user.email} {user.is_admin && <span className="text-sky-400 font-semibold">· amministratore</span>}
+          </p>
+        </div>
+        <Button size="sm" variant="ghost" disabled={busy} onClick={onToggleEdit}>
+          {editing ? "Chiudi" : "Modifica"}
+        </Button>
+        {!user.is_admin && (
+          <Button size="sm" variant="danger" disabled={busy} onClick={onDelete}>
+            Elimina
+          </Button>
+        )}
+      </div>
+
+      {editing && (
+        <div className="pt-2 border-t border-slate-800 space-y-2">
+          <Input label="Nome" value={name} onChange={(e) => setName(e.target.value)} />
+          <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <Input
+            label="Nuova password (lascia vuoto per non cambiarla)"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="min. 6 caratteri"
+          />
+          <Button
+            size="sm"
+            disabled={busy}
+            onClick={() => {
+              const patch: { displayName?: string; email?: string; password?: string } = {};
+              if (name.trim() && name.trim() !== user.display_name) patch.displayName = name.trim();
+              if (email.trim() && email.trim() !== user.email) patch.email = email.trim();
+              if (password) patch.password = password;
+              onSave(patch);
+            }}
+          >
+            Salva modifiche
+          </Button>
+        </div>
+      )}
+    </div>
   );
 }

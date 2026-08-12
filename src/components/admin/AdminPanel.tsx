@@ -66,11 +66,18 @@ export function AdminPanel({ code, token, league, state, participants, players, 
           Stato: <span className="font-semibold text-slate-200">{league.status}</span> · Fase asta:{" "}
           <span className="font-semibold text-slate-200">{state.phase}</span>
         </p>
-        <Link href="/admin/utenti">
-          <Button variant="ghost" size="sm">
-            👤 Gestisci utenti registrati
-          </Button>
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/admin/utenti">
+            <Button variant="ghost" size="sm">
+              👤 Gestisci utenti registrati
+            </Button>
+          </Link>
+          <Link href={`/league/${code}/schermo`} target="_blank">
+            <Button variant="ghost" size="sm">
+              🖥️ Apri schermo per proiettore
+            </Button>
+          </Link>
+        </div>
       </Card>
 
       {league.status === "SETUP" && (

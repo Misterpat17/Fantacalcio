@@ -33,8 +33,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
       return NextResponse.json({ participantId: existing.id, leagueId: league.id, isAdmin: existing.is_admin });
     }
 
-    if (league.status !== "SETUP") {
-      return jsonError(409, "LEAGUE_NOT_JOINABLE", "L'asta è già iniziata: chiedi all'admin di aggiungerti manualmente.");
+    // Si può entrare finché la lega non è finita o annullata: anche ad
+    // asta avviata (o in pausa), purché non sia già stato raggiunto il
+    // numero massimo di partecipanti (controllato più sotto).
+    if (league.status === "FINISHED" || league.status === "CANCELLED") {
+      return jsonError(409, "LEAGUE_NOT_JOINABLE", "Questa lega non accetta più nuovi partecipanti.");
     }
 
     const { data: profile } = await sb.from("profiles").select("display_name").eq("id", user.id).maybeSingle();

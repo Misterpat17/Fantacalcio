@@ -37,7 +37,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ code
     if (state?.current_round_id) {
       const { data } = await sb
         .from("bid_rounds")
-        .select("id, round_number, eligible_participant_ids, started_at, ends_at, status, responded_count, participating_count, winner_participant_id, winner_amount, revealed_bids")
+        .select("id, round_number, eligible_participant_ids, participating_participant_ids, started_at, ends_at, status, responded_count, participating_count, winner_participant_id, winner_amount, revealed_bids")
         .eq("id", state.current_round_id)
         .maybeSingle();
       currentRound = data;
