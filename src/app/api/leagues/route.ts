@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
 import { supabaseServer } from "@/lib/supabaseServer";
-import { generateToken, hashToken } from "@/lib/auth";
+import { requireGlobalAdmin } from "@/lib/auth";
 import { handleRouteError, jsonError } from "@/lib/apiResponse";
 
 function randomCode(name: string): string {
@@ -13,13 +12,16 @@ function randomCode(name: string): string {
   return `${base || "LEGA"}${suffix}`;
 }
 
+// Solo l'amministratore globale (un unico account, profiles.is_admin)
+// può creare una nuova lega: non serve più una password admin per lega,
+// l'identità è già garantita dall'account autenticato.
 export async function POST(req: NextRequest) {
   try {
+    const admin = await requireGlobalAdmin(req);
+
     const body = await req.json();
     const {
       name,
-      adminDisplayName,
-      adminPassword,
       numParticipants = 8,
       creditsIniziali = 1000,
       rosterSize = 25,
@@ -33,11 +35,8 @@ export async function POST(req: NextRequest) {
     } = body || {};
 
     if (!name || typeof name !== "string") return jsonError(422, "MISSING_NAME");
-    if (!adminDisplayName || typeof adminDisplayName !== "string") return jsonError(422, "MISSING_ADMIN_NAME");
-    if (!adminPassword || String(adminPassword).length < 4) return jsonError(422, "WEAK_ADMIN_PASSWORD", "La password admin deve avere almeno 4 caratteri");
 
     const sb = supabaseServer();
-    const passwordHash = await bcrypt.hash(String(adminPassword), 10);
 
     let code = randomCode(name);
     for (let attempt = 0; attempt < 5; attempt++) {
@@ -51,7 +50,7 @@ export async function POST(req: NextRequest) {
       .insert({
         code,
         name,
-        admin_password_hash: passwordHash,
+        created_by: admin.id,
         num_participants: numParticipants,
         credits_iniziali: creditsIniziali,
         roster_size: rosterSize,
@@ -73,14 +72,13 @@ export async function POST(req: NextRequest) {
 
     await sb.from("auction_state").insert({ league_id: league.id, phase: "WAITING" });
 
-    const token = generateToken();
-    const { data: admin, error: adminErr } = await sb
+    const { data: adminParticipant, error: adminErr } = await sb
       .from("participants")
       .insert({
         league_id: league.id,
-        display_name: adminDisplayName,
+        display_name: admin.displayName,
         turn_order: adminPlays ? 1 : null,
-        token_hash: hashToken(token),
+        user_id: admin.id,
         is_admin: true,
         is_player: !!adminPlays,
         credits_current: adminPlays ? creditsIniziali : 0,
@@ -88,13 +86,12 @@ export async function POST(req: NextRequest) {
       .select()
       .single();
 
-    if (adminErr || !admin) throw adminErr || new Error("Impossibile creare l'admin");
+    if (adminErr || !adminParticipant) throw adminErr || new Error("Impossibile creare l'admin");
 
     return NextResponse.json({
       code: league.code,
       leagueId: league.id,
-      token,
-      participantId: admin.id,
+      participantId: adminParticipant.id,
       isAdmin: true,
     });
   } catch (err) {

@@ -103,7 +103,7 @@ export function CallStage({
       <Card className="p-10 text-center space-y-2">
         <p className="text-3xl">🎉</p>
         <h2 className="text-2xl font-black">ASTA TERMINATA</h2>
-        <p className="text-sm text-slate-400">Tutte le rose sono state completate. Consulta la classifica e lo storico.</p>
+        <p className="text-sm text-slate-400">Tutte le rose sono state completate. Consulta la classifica per il riepilogo finale.</p>
       </Card>
     );
   }

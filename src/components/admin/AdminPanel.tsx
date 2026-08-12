@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { Card } from "../ui/Card";
 import { Button } from "../ui/Button";
 import { Input, Select } from "../ui/Input";
@@ -11,7 +12,7 @@ import { AuctionState, LeaguePublic, Participant, Player, RosterEntry, TiebreakR
 
 interface Props {
   code: string;
-  token: string;
+  token: string | null;
   league: LeaguePublic;
   state: AuctionState;
   participants: Participant[];
@@ -57,11 +58,19 @@ export function AdminPanel({ code, token, league, state, participants, players, 
       <Card className="p-5 space-y-3">
         <h2 className="font-bold text-slate-200">Codice lega</h2>
         <p className="text-3xl font-black font-mono tracking-widest text-sky-400">{code}</p>
-        <p className="text-sm text-slate-400">Condividi questo codice con gli altri partecipanti per farli entrare.</p>
+        <p className="text-sm text-slate-400">
+          Condividi questo codice con gli altri: dovranno registrarsi (o accedere) e poi inserirlo in home per entrare
+          in questa lega.
+        </p>
         <p className="text-sm text-slate-400">
           Stato: <span className="font-semibold text-slate-200">{league.status}</span> · Fase asta:{" "}
           <span className="font-semibold text-slate-200">{state.phase}</span>
         </p>
+        <Link href="/admin/utenti">
+          <Button variant="ghost" size="sm">
+            👤 Gestisci utenti registrati
+          </Button>
+        </Link>
       </Card>
 
       {league.status === "SETUP" && (
@@ -156,7 +165,7 @@ function RosterCorrections({
   busy,
 }: {
   code: string;
-  token: string;
+  token: string | null;
   rosters: RosterEntry[];
   playersById: Map<string, Player>;
   participantsById: Map<string, Participant>;
@@ -237,7 +246,7 @@ function ManualAssignAndCredits({
   busy,
 }: {
   code: string;
-  token: string;
+  token: string | null;
   availablePlayers: Player[];
   playingParticipants: Participant[];
   run: RunFn;
@@ -342,7 +351,7 @@ function PlayerRemoval({
   busy,
 }: {
   code: string;
-  token: string;
+  token: string | null;
   availablePlayers: Player[];
   run: RunFn;
   busy: boolean;
@@ -386,14 +395,13 @@ function ParticipantsAdmin({
   busy,
 }: {
   code: string;
-  token: string;
+  token: string | null;
   participants: Participant[];
   run: RunFn;
   busy: boolean;
 }) {
   const [order, setOrder] = useState<string[]>(participants.map((p) => p.id));
-  const [newName, setNewName] = useState("");
-  const [lastToken, setLastToken] = useState<{ name: string; token: string } | null>(null);
+  const [renameDrafts, setRenameDrafts] = useState<Record<string, string>>({});
 
   const orderedIds = order.filter((id) => participants.some((p) => p.id === id));
   const missing = participants.map((p) => p.id).filter((id) => !orderedIds.includes(id));
@@ -411,15 +419,45 @@ function ParticipantsAdmin({
   return (
     <Card className="p-5 space-y-4">
       <h2 className="font-bold text-slate-200">Partecipanti e ordine dei turni</h2>
+      <p className="text-xs text-slate-500">
+        Gli utenti si iscrivono da soli con il codice lega. Qui puoi rinominarli (solo per questa lega), riordinare i
+        turni o rimuoverli.
+      </p>
 
       <div className="space-y-1.5">
         {effectiveOrder.map((id, idx) => {
           const p = participants.find((pp) => pp.id === id);
           if (!p) return null;
+          const draft = renameDrafts[id] ?? p.display_name;
+          const changed = draft.trim() !== "" && draft.trim() !== p.display_name;
           return (
             <div key={id} className="flex items-center gap-2 text-sm border border-slate-800 rounded-lg px-3 py-2">
               <span className="w-6 text-slate-500 font-mono">{idx + 1}</span>
-              <span className="flex-1">{p.display_name}</span>
+              <Input
+                className="flex-1 px-2 py-1"
+                value={draft}
+                onChange={(e) => setRenameDrafts((prev) => ({ ...prev, [id]: e.target.value }))}
+              />
+              {changed && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={busy}
+                  onClick={() =>
+                    run(
+                      () =>
+                        apiFetch(`/api/leagues/${code}/admin/participants/${id}`, {
+                          method: "PATCH",
+                          token,
+                          body: { displayName: draft.trim() },
+                        }),
+                      "Nome aggiornato."
+                    )
+                  }
+                >
+                  Salva nome
+                </Button>
+              )}
               <Button size="sm" variant="ghost" disabled={busy} onClick={() => move(id, -1)}>
                 ↑
               </Button>
@@ -462,35 +500,6 @@ function ParticipantsAdmin({
       >
         Salva ordine
       </Button>
-
-      <div className="pt-3 border-t border-slate-800 space-y-2">
-        <div className="flex flex-wrap gap-2">
-          <Input placeholder="Nome nuovo partecipante" value={newName} onChange={(e) => setNewName(e.target.value)} className="w-auto" />
-          <Button
-            size="sm"
-            disabled={busy || !newName.trim()}
-            onClick={() =>
-              run(async () => {
-                const res = await apiFetch<{ token: string }>(`/api/leagues/${code}/admin/participants`, {
-                  method: "POST",
-                  token,
-                  body: { displayName: newName.trim(), isPlayer: true },
-                });
-                setLastToken({ name: newName.trim(), token: res.token });
-                setNewName("");
-              }, "Partecipante aggiunto.")
-            }
-          >
-            Aggiungi partecipante
-          </Button>
-        </div>
-        {lastToken && (
-          <p className="text-xs text-amber-400 break-all">
-            Token di accesso per {lastToken.name} (da comunicare manualmente, es. copiandolo nel browser del partecipante):{" "}
-            <span className="font-mono">{lastToken.token}</span>
-          </p>
-        )}
-      </div>
     </Card>
   );
 }
@@ -503,7 +512,7 @@ function SettingsPanel({
   busy,
 }: {
   code: string;
-  token: string;
+  token: string | null;
   league: LeaguePublic;
   run: RunFn;
   busy: boolean;

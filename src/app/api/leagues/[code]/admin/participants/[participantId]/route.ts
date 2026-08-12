@@ -3,6 +3,47 @@ import { supabaseServer } from "@/lib/supabaseServer";
 import { requireAdmin } from "@/lib/auth";
 import { handleRouteError, jsonError } from "@/lib/apiResponse";
 
+// Rinomina un partecipante (solo per questa lega: non tocca il profilo
+// globale dell'utente, che resta suo).
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ code: string; participantId: string }> }
+) {
+  try {
+    const { code, participantId } = await params;
+    const sb = supabaseServer();
+    const { data: league } = await sb.from("leagues").select("id").eq("code", code.toUpperCase()).maybeSingle();
+    if (!league) return jsonError(404, "LEAGUE_NOT_FOUND");
+
+    await requireAdmin(req, league.id);
+
+    const { displayName } = await req.json();
+    const trimmed = String(displayName || "").trim();
+    if (!trimmed) return jsonError(422, "MISSING_NAME");
+
+    const { data: updated, error } = await sb
+      .from("participants")
+      .update({ display_name: trimmed })
+      .eq("id", participantId)
+      .eq("league_id", league.id)
+      .select()
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!updated) return jsonError(404, "PARTICIPANT_NOT_FOUND");
+
+    await sb.from("history").insert({
+      league_id: league.id,
+      event_type: "ADMIN_RENAME_PARTICIPANT",
+      payload: { participant_id: participantId, display_name: trimmed },
+    });
+
+    return NextResponse.json({ ok: true, participant: updated });
+  } catch (err) {
+    return handleRouteError(err);
+  }
+}
+
 export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ code: string; participantId: string }> }

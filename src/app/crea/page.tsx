@@ -1,21 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input, Select } from "@/components/ui/Input";
 import { Card } from "@/components/ui/Card";
 import { apiFetch, ApiError } from "@/lib/apiClient";
-import { saveSession } from "@/lib/session";
+import { useSupabaseAuth } from "@/hooks/useSupabaseAuth";
 
 const TIMER_OPTIONS = [15, 20, 30, 45, 60];
 const TIEBREAK_OPTIONS = [10, 15, 20, 30];
 
+interface MeResponse {
+  displayName: string;
+  isAdmin: boolean;
+}
+
 export default function CreaLegaPage() {
   const router = useRouter();
+  const { loading: authLoading, user, token } = useSupabaseAuth();
+  const [me, setMe] = useState<MeResponse | null | undefined>(undefined);
+
   const [name, setName] = useState("Lega di Mario");
-  const [adminDisplayName, setAdminDisplayName] = useState("");
-  const [adminPassword, setAdminPassword] = useState("");
   const [adminPlays, setAdminPlays] = useState(true);
   const [numParticipants, setNumParticipants] = useState(8);
   const [creditsIniziali, setCreditsIniziali] = useState(1000);
@@ -34,11 +40,22 @@ export default function CreaLegaPage() {
 
   const slotsTotal = slotP + slotD + slotC + slotA;
 
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user || !token) {
+      router.replace("/login");
+      return;
+    }
+    apiFetch<MeResponse>("/api/me", { token })
+      .then(setMe)
+      .catch(() => setMe(null));
+  }, [authLoading, user, token, router]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!name.trim() || !adminDisplayName.trim() || adminPassword.length < 4) {
-      setError("Compila tutti i campi obbligatori (password admin di almeno 4 caratteri).");
+    if (!name.trim()) {
+      setError("Inserisci un nome per la lega.");
       return;
     }
     if (slotsTotal !== rosterSize) {
@@ -47,32 +64,21 @@ export default function CreaLegaPage() {
     }
     setLoading(true);
     try {
-      const res = await apiFetch<{ code: string; token: string; participantId: string; isAdmin: boolean }>(
-        "/api/leagues",
-        {
-          method: "POST",
-          body: {
-            name: name.trim(),
-            adminDisplayName: adminDisplayName.trim(),
-            adminPassword,
-            adminPlays,
-            numParticipants,
-            creditsIniziali,
-            rosterSize,
-            slots: { P: slotP, D: slotD, C: slotC, A: slotA },
-            timerSeconds,
-            tiebreakSeconds,
-            tiebreakRule,
-            passLimit: passLimitEnabled ? passLimit : null,
-          },
-        }
-      );
-      saveSession({
-        token: res.token,
-        participantId: res.participantId,
-        displayName: adminDisplayName.trim(),
-        isAdmin: true,
-        leagueCode: res.code,
+      const res = await apiFetch<{ code: string }>("/api/leagues", {
+        method: "POST",
+        token,
+        body: {
+          name: name.trim(),
+          adminPlays,
+          numParticipants,
+          creditsIniziali,
+          rosterSize,
+          slots: { P: slotP, D: slotD, C: slotC, A: slotA },
+          timerSeconds,
+          tiebreakSeconds,
+          tiebreakRule,
+          passLimit: passLimitEnabled ? passLimit : null,
+        },
       });
       router.push(`/league/${res.code}/admin`);
     } catch (err) {
@@ -80,6 +86,21 @@ export default function CreaLegaPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (authLoading || me === undefined) {
+    return <main className="flex-1 flex items-center justify-center text-slate-400">Caricamento...</main>;
+  }
+
+  if (!me?.isAdmin) {
+    return (
+      <main className="flex-1 flex items-center justify-center px-4 py-10">
+        <Card className="p-6 max-w-md text-center space-y-2">
+          <h1 className="text-xl font-bold text-rose-400">Accesso riservato</h1>
+          <p className="text-sm text-slate-400">Solo l&apos;amministratore può creare una nuova asta.</p>
+        </Card>
+      </main>
+    );
   }
 
   return (
@@ -93,24 +114,8 @@ export default function CreaLegaPage() {
         </div>
 
         <Card className="p-5 space-y-4">
-          <h2 className="font-bold text-slate-200">Dati lega e amministratore</h2>
+          <h2 className="font-bold text-slate-200">Dati lega</h2>
           <Input label="Nome della lega" value={name} onChange={(e) => setName(e.target.value)} required />
-          <div className="grid grid-cols-2 gap-3">
-            <Input
-              label="Il tuo nome (admin)"
-              value={adminDisplayName}
-              onChange={(e) => setAdminDisplayName(e.target.value)}
-              required
-            />
-            <Input
-              label="Password admin"
-              type="password"
-              value={adminPassword}
-              onChange={(e) => setAdminPassword(e.target.value)}
-              placeholder="min. 4 caratteri"
-              required
-            />
-          </div>
           <label className="flex items-center gap-2 text-sm text-slate-300">
             <input type="checkbox" checked={adminPlays} onChange={(e) => setAdminPlays(e.target.checked)} className="rounded" />
             Anche io partecipo all&apos;asta come giocatore (con la mia rosa)

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { apiFetch } from "@/lib/apiClient";
+import { apiFetch, ApiError } from "@/lib/apiClient";
 import { Participant } from "@/lib/types";
 
 interface MeResponse {
@@ -12,9 +12,14 @@ interface MeResponse {
 }
 
 // Dati privati del partecipante autenticato (i propri crediti aggiornati,
-// la propria scelta sul round corrente, l'offerta massima consentita).
+// la propria scelta sul round corrente, l'offerta massima consentita, e
+// la propria identità di partecipante — usata anche per il gating delle
+// pagine dashboard/admin). Se l'utente è loggato ma non fa parte di
+// questa lega, l'API risponde 403 NOT_A_PARTICIPANT: lo esponiamo come
+// `error` così le pagine possono mostrare un invito a iscriversi.
 export function useMe(code: string, token: string | null, roundId: string | null | undefined) {
   const [data, setData] = useState<MeResponse | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
@@ -22,6 +27,10 @@ export function useMe(code: string, token: string | null, roundId: string | null
     try {
       const res = await apiFetch<MeResponse>(`/api/leagues/${code}/me`, { token });
       setData(res);
+      setError(null);
+    } catch (err) {
+      setData(null);
+      setError(err instanceof ApiError ? err : new ApiError("Errore di rete.", 0, "NETWORK_ERROR"));
     } finally {
       setLoading(false);
     }
@@ -29,8 +38,7 @@ export function useMe(code: string, token: string | null, roundId: string | null
 
   useEffect(() => {
     refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refresh, roundId]);
 
-  return { data, loading, refresh };
+  return { data, error, loading, refresh };
 }

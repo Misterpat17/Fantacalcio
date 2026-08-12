@@ -25,7 +25,7 @@ const COLUMN_ROLE_LABEL: Record<ColumnRole, string> = {
   ignora: "Ignora colonna",
 };
 
-export function ImportWizard({ code, token, onImported }: { code: string; token: string; onImported: () => void }) {
+export function ImportWizard({ code, token, onImported }: { code: string; token: string | null; onImported: () => void }) {
   const [sheets, setSheets] = useState<ParsedSheet[]>([]);
   const [sheetIndex, setSheetIndex] = useState(0);
   const [mapping, setMapping] = useState<Record<number, ColumnRole>>({});

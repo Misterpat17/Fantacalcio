@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { TopBar } from "@/components/TopBar";
 import { Card } from "@/components/ui/Card";
@@ -8,23 +8,21 @@ import { Button } from "@/components/ui/Button";
 import { useAuctionState } from "@/hooks/useAuctionState";
 import { useRosters } from "@/hooks/useRosters";
 import { usePlayers } from "@/hooks/usePlayers";
-import { loadSession, StoredSession } from "@/lib/session";
+import { useMe } from "@/hooks/useMe";
+import { useSupabaseAuth } from "@/hooks/useSupabaseAuth";
 import { Ruolo } from "@/lib/types";
 
 export default function ClassificaPage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = use(params);
   const upperCode = code.toUpperCase();
   const router = useRouter();
-  const [session, setSession] = useState<StoredSession | null | undefined>(undefined);
+  const { loading: authLoading, user, token } = useSupabaseAuth();
+  const { data: meData } = useMe(upperCode, token, null);
+  const participant = meData?.participant ?? null;
 
   useEffect(() => {
-    const s = loadSession(upperCode);
-    if (!s) {
-      router.replace("/");
-      return;
-    }
-    setSession(s);
-  }, [upperCode, router]);
+    if (!authLoading && !user) router.replace("/login");
+  }, [authLoading, user, router]);
 
   const { league, participants, leagueId } = useAuctionState(upperCode);
   const { rosters } = useRosters(leagueId);
@@ -48,13 +46,13 @@ export default function ClassificaPage({ params }: { params: Promise<{ code: str
       .sort((a, b) => b.totale - a.totale || b.participant.credits_current - a.participant.credits_current);
   }, [participants, rosters, playersById]);
 
-  if (!league) {
+  if (authLoading || !league) {
     return <main className="flex-1 flex items-center justify-center text-slate-400">Caricamento...</main>;
   }
 
   return (
     <div className="flex-1 flex flex-col">
-      <TopBar code={upperCode} leagueName={league.name} isAdmin={!!session?.isAdmin} displayName={session?.displayName} />
+      <TopBar code={upperCode} leagueName={league.name} isAdmin={!!participant?.is_admin} displayName={participant?.display_name} />
       <main className="flex-1 max-w-5xl w-full mx-auto px-4 py-6 space-y-4">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-black">Classifica</h1>

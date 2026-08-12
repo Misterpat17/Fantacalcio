@@ -6,7 +6,7 @@ import { apiFetch, ApiError } from "@/lib/apiClient";
 
 interface Props {
   code: string;
-  token: string;
+  token: string | null;
   roundId: string;
   eligible: boolean;
   roleAvailable: boolean | null;
