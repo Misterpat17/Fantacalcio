@@ -39,6 +39,26 @@ export async function callRpc<T = unknown>(
   return data as T;
 }
 
+// Estrae un messaggio leggibile da qualunque tipo di errore. Gli errori
+// di Supabase/Postgrest (es. da `{ data, error } = await sb.from(...)`)
+// sono oggetti con una proprietà `message`, ma NON sono istanze di
+// `Error`: senza questo helper finivano nel ramo generico "Errore
+// interno", nascondendo la causa reale (RLS, tabella inesistente, ecc.)
+// sia all'utente che nei log.
+function errorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (err && typeof err === "object" && "message" in err && typeof (err as { message: unknown }).message === "string") {
+    const pgErr = err as { message: string; details?: string; hint?: string; code?: string };
+    const parts = [pgErr.message, pgErr.details, pgErr.hint].filter(Boolean);
+    return parts.join(" — ") + (pgErr.code ? ` (codice: ${pgErr.code})` : "");
+  }
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return "Errore interno";
+  }
+}
+
 export function handleRouteError(err: unknown) {
   if (err instanceof AuthError) {
     return jsonError(err.status, err.message);
@@ -68,5 +88,5 @@ export function handleRouteError(err: unknown) {
     return jsonError(status, err.code, err.detail);
   }
   console.error(err);
-  return jsonError(500, "INTERNAL_ERROR", err instanceof Error ? err.message : "Errore interno");
+  return jsonError(500, "INTERNAL_ERROR", errorMessage(err));
 }
