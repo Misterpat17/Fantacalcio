@@ -96,8 +96,8 @@ export default function SchermoPage({ params }: { params: Promise<{ code: string
       )}
 
       {state.phase === "AWARDED" && state.last_result && (
-        <div className="text-3xl scale-125">
-          <ResultBanner result={state.last_result as never} participants={participants} />
+        <div className="w-full max-w-3xl">
+          <ResultBanner result={state.last_result as never} participants={participants} variant="screen" />
         </div>
       )}
     </main>
