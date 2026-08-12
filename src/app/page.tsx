@@ -30,6 +30,7 @@ export default function HomePage() {
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [deletingCode, setDeletingCode] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token) {
@@ -44,6 +45,23 @@ export default function HomePage() {
       .then((res) => setMyLeagues(res.leagues))
       .catch(() => setMyLeagues([]));
   }, [token]);
+
+  async function handleDeleteLeague(l: MyLeague) {
+    if (!token) return;
+    const ok = window.confirm(
+      `Eliminare definitivamente la lega "${l.name}" (${l.code})?\nVerranno cancellati per sempre partecipanti, giocatori, rose e storico. L'operazione non è reversibile.`
+    );
+    if (!ok) return;
+    setDeletingCode(l.code);
+    try {
+      await apiFetch(`/api/leagues/${l.code}`, { method: "DELETE", token });
+      setMyLeagues((prev) => (prev ? prev.filter((x) => x.code !== l.code) : prev));
+    } catch {
+      alert("Non è stato possibile eliminare la lega. Riprova.");
+    } finally {
+      setDeletingCode(null);
+    }
+  }
 
   async function handleJoin(e: React.FormEvent) {
     e.preventDefault();
@@ -127,11 +145,22 @@ export default function HomePage() {
                     </Button>
                   </Link>
                   {l.isAdmin && (
-                    <Link href={`/league/${l.code}/admin`}>
-                      <Button size="sm" variant="ghost">
-                        Admin
+                    <>
+                      <Link href={`/league/${l.code}/admin`}>
+                        <Button size="sm" variant="ghost">
+                          Admin
+                        </Button>
+                      </Link>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-rose-400 hover:text-rose-300"
+                        disabled={deletingCode === l.code}
+                        onClick={() => handleDeleteLeague(l)}
+                      >
+                        {deletingCode === l.code ? "..." : "🗑️"}
                       </Button>
-                    </Link>
+                    </>
                   )}
                 </div>
               ))}
