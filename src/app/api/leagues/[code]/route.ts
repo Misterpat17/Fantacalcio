@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
+import { requireAdmin } from "@/lib/auth";
 import { handleRouteError, jsonError } from "@/lib/apiResponse";
 
 // Info pubbliche della lega (nessun campo sensibile) + elenco partecipanti
@@ -26,6 +27,33 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ code
       .order("turn_order", { ascending: true, nullsFirst: false });
 
     return NextResponse.json({ league, participants: participants || [] });
+  } catch (err) {
+    return handleRouteError(err);
+  }
+}
+
+// Elimina definitivamente una lega (e, per cascata, tutti i suoi
+// partecipanti/giocatori/round/rose/storico: tutte le foreign key su
+// leagues(id) sono "on delete cascade", vedi 0001_init.sql). Riservata
+// all'admin di quella specifica lega, richiesta dalla sezione "Le tue
+// leghe" della home.
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ code: string }> }) {
+  try {
+    const { code } = await params;
+    const sb = supabaseServer();
+    const { data: league } = await sb
+      .from("leagues")
+      .select("id")
+      .eq("code", code.toUpperCase())
+      .maybeSingle();
+    if (!league) return jsonError(404, "LEAGUE_NOT_FOUND");
+
+    await requireAdmin(req, league.id);
+
+    const { error } = await sb.from("leagues").delete().eq("id", league.id);
+    if (error) throw error;
+
+    return NextResponse.json({ ok: true });
   } catch (err) {
     return handleRouteError(err);
   }
