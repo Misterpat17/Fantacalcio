@@ -11,7 +11,6 @@ export const RUOLO_LABEL: Record<Ruolo, string> = {
   A: "Attaccante",
 };
 
-// Colori distintivi per ruolo (Tailwind classes)
 export const RUOLO_COLOR: Record<Ruolo, { bg: string; text: string; border: string; dot: string }> = {
   P: { bg: "bg-amber-500/10", text: "text-amber-400", border: "border-amber-500/40", dot: "bg-amber-400" },
   D: { bg: "bg-emerald-500/10", text: "text-emerald-400", border: "border-emerald-500/40", dot: "bg-emerald-400" },
@@ -99,7 +98,7 @@ export interface BidRound {
   round_number: number;
   eligible_participant_ids: string[];
   started_at: string;
-  ends_at: string;
+  ends_at: string | null;
   status: "OPEN" | "CLOSED" | "RESOLVED" | "TIE_ADVANCED";
   responded_count: number;
   participating_count: number;
