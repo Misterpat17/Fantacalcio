@@ -32,7 +32,16 @@ export function PlayerHero({
       </div>
       {callerName && <p className="text-sm text-slate-500">Chiamato da {callerName}</p>}
 
-      <TimerDisplay remainingMs={remainingMs} size="xl" />
+      {remainingMs !== null ? (
+        <TimerDisplay remainingMs={remainingMs} size="xl" />
+      ) : (
+        <div className="py-2">
+          <p className="text-lg font-bold text-amber-400">⏳ In attesa che tutti rispondano...</p>
+          <p className="text-xs text-slate-500 mt-1">
+            Il tempo per l&apos;offerta partirà non appena tutti avranno scelto.
+          </p>
+        </div>
+      )}
 
       <p className="text-sm text-slate-400">
         {respondedCount}/{eligibleCount} hanno risposto · {participatingCount} partecipano
