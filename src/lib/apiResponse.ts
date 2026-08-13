@@ -83,6 +83,11 @@ export function handleRouteError(err: unknown) {
       NOT_PAUSED: 409,
       ROSTER_NOT_FOUND: 404,
       PLAYER_ALREADY_SOLD: 409,
+      PAUSE_ALREADY_USED: 409,
+      NOT_CALLER: 403,
+      NOT_YOUR_PAUSE: 403,
+      PARTICIPANT_NOT_FOUND: 404,
+      STATE_NOT_FOUND: 404,
     };
     const status = statusByCode[err.code] || 400;
     return jsonError(status, err.code, err.detail);

@@ -48,7 +48,16 @@ export default function SchermoPage({ params }: { params: Promise<{ code: string
         <p className="text-3xl font-bold text-slate-400">L&apos;asta non è ancora iniziata</p>
       )}
 
-      {state.phase === "PAUSED" && <p className="text-4xl font-bold text-amber-400">⏸️ ASTA IN PAUSA</p>}
+      {state.phase === "PAUSED" && (
+        <div className="space-y-2">
+          <p className="text-4xl font-bold text-amber-400">⏸️ ASTA IN PAUSA</p>
+          {state.paused_by_caller_id && (
+            <p className="text-lg text-slate-400">
+              {participantsById.get(state.paused_by_caller_id)?.display_name || "Il chiamante"} ha fermato il countdown.
+            </p>
+          )}
+        </div>
+      )}
 
       {state.phase === "FINISHED" && <p className="text-4xl font-black">🎉 ASTA TERMINATA</p>}
 
@@ -62,32 +71,35 @@ export default function SchermoPage({ params }: { params: Promise<{ code: string
       )}
 
       {(state.phase === "BIDDING" || state.phase === "TIE_BREAK") && currentPlayer && currentRound && (
-        <div className="space-y-6 fade-in-up">
-          <p className="text-lg uppercase tracking-widest text-slate-500">
-            {state.phase === "TIE_BREAK" ? "🔥 SPAREGGIO" : "🔥 GIOCATORE IN ASTA"}
-          </p>
-          <h2 className="text-6xl font-black tracking-tight">{currentPlayer.nome.toUpperCase()}</h2>
-          <p className="text-2xl text-slate-400">{currentPlayer.squadra || "—"}</p>
-          <div className="flex justify-center">
-            <RoleBadge ruolo={currentPlayer.ruolo} size="lg" />
-            <span className="sr-only">{RUOLO_LABEL[currentPlayer.ruolo]}</span>
-          </div>
-          {callerName && <p className="text-lg text-slate-500">Chiamato da {callerName}</p>}
+        <div className="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-[1.3fr_1fr] gap-10 items-center fade-in-up">
+          <div className="space-y-6 text-center lg:text-left">
+            <p className="text-lg uppercase tracking-widest text-slate-500">
+              {state.phase === "TIE_BREAK" ? "🔥 SPAREGGIO" : "🔥 GIOCATORE IN ASTA"}
+            </p>
+            <h2 className="text-6xl font-black tracking-tight">{currentPlayer.nome.toUpperCase()}</h2>
+            <p className="text-2xl text-slate-400">{currentPlayer.squadra || "—"}</p>
+            <div className="flex justify-center lg:justify-start">
+              <RoleBadge ruolo={currentPlayer.ruolo} size="lg" />
+              <span className="sr-only">{RUOLO_LABEL[currentPlayer.ruolo]}</span>
+            </div>
+            {callerName && <p className="text-lg text-slate-500">Chiamato da {callerName}</p>}
 
-          {remainingMs !== null ? (
-            <TimerDisplay remainingMs={remainingMs} size="xl" />
-          ) : (
-            <p className="text-2xl font-bold text-amber-400">⏳ In attesa che tutti rispondano...</p>
-          )}
-
-          <div className="pt-4">
-            <DecisionList
-              eligibleIds={currentRound.eligible_participant_ids}
-              participatingIds={currentRound.participating_participant_ids}
-              declinedIds={currentRound.declined_participant_ids}
-              participants={participants}
-            />
+            {remainingMs !== null ? (
+              <div className={remainingMs <= 5000 ? "screen-timer-urgent" : ""}>
+                <TimerDisplay remainingMs={remainingMs} size="xl" />
+              </div>
+            ) : (
+              <p className="text-2xl font-bold text-amber-400">⏳ In attesa che tutti rispondano...</p>
+            )}
           </div>
+
+          <DecisionList
+            eligibleIds={currentRound.eligible_participant_ids}
+            participatingIds={currentRound.participating_participant_ids}
+            declinedIds={currentRound.declined_participant_ids}
+            participants={participants}
+            big
+          />
         </div>
       )}
 

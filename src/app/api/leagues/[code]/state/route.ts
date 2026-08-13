@@ -22,7 +22,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ code
       sb.from("auction_state").select("*").eq("league_id", league.id).maybeSingle(),
       sb
         .from("participants")
-        .select("id, display_name, turn_order, is_admin, is_player, credits_current, consecutive_passes, connected, last_seen")
+        .select(
+          "id, display_name, turn_order, is_admin, is_player, credits_current, consecutive_passes, connected, last_seen, caller_pause_used"
+        )
         .eq("league_id", league.id)
         .order("turn_order", { ascending: true, nullsFirst: false }),
       Promise.resolve({ data: null as null }),

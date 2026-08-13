@@ -64,6 +64,10 @@ export interface Participant {
   consecutive_passes: number;
   connected: boolean;
   last_seen: string | null;
+  // "Gettone" personale, uno per tutta l'asta: true appena usato una
+  // volta per fermare il countdown mentre chiamava un giocatore, non si
+  // ricarica più.
+  caller_pause_used: boolean;
 }
 
 export interface Player {
@@ -86,6 +90,11 @@ export interface AuctionState {
   current_caller_participant_id: string | null;
   current_player_id: string | null;
   current_round_id: string | null;
+  // Se la pausa attuale è stata avviata dal chiamante (col suo gettone
+  // personale) invece che dall'admin, questo è il suo id: solo lui (in
+  // più dell'admin, che può sempre riprendere) può far ripartire il
+  // countdown.
+  paused_by_caller_id: string | null;
   phase_end_at: string | null;
   last_result: Record<string, unknown> | null;
   updated_at: string;

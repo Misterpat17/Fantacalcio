@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "./ui/Button";
 import { apiFetch, ApiError } from "@/lib/apiClient";
 
@@ -28,8 +28,22 @@ export function BiddingPanel({ code, token, roundId, eligible, roleAvailable, ma
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
+  // true dal momento in cui l'utente clicca PARTECIPO/NON PARTECIPO in
+  // questa busta: da qui in poi il polling periodico di `myBid` non deve
+  // più sovrascrivere la sua scelta locale, altrimenti chi rispondeva
+  // "non partecipo" e poi cambiava idea cliccando "partecipo" si vedeva
+  // riportare la scelta indietro dal refresh successivo prima ancora di
+  // riuscire a confermare la nuova offerta.
+  const userEditedRef = useRef(false);
+
+  // Nuova busta: si riparte "vergini", pronti a precaricare di nuovo
+  // un'eventuale scelta già salvata (es. dopo un ricaricamento pagina).
+  useEffect(() => {
+    userEditedRef.current = false;
+  }, [roundId]);
 
   useEffect(() => {
+    if (userEditedRef.current) return;
     setDecision((myBid?.decision as "partecipo" | "non_partecipo") || null);
     setAmount(myBid?.amount ? String(myBid.amount) : "");
   }, [myBid?.decision, myBid?.amount]);
@@ -91,7 +105,10 @@ export function BiddingPanel({ code, token, roundId, eligible, roleAvailable, ma
         <Button
           variant={decision === "partecipo" ? "success" : "ghost"}
           disabled={locked || submitting || roleAvailable === false}
-          onClick={() => setDecision("partecipo")}
+          onClick={() => {
+            userEditedRef.current = true;
+            setDecision("partecipo");
+          }}
         >
           ✅ PARTECIPO
         </Button>
@@ -99,6 +116,7 @@ export function BiddingPanel({ code, token, roundId, eligible, roleAvailable, ma
           variant={decision === "non_partecipo" ? "danger" : "ghost"}
           disabled={locked || submitting}
           onClick={() => {
+            userEditedRef.current = true;
             setDecision("non_partecipo");
             submit("non_partecipo");
           }}

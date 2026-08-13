@@ -28,6 +28,11 @@ interface Props {
     maxBid: number | null;
     roleAvailable: boolean | null;
   } | null;
+  // Se il partecipante loggato ha già usato il suo gettone personale per
+  // fermare il countdown mentre chiamava un giocatore (uno per tutta
+  // l'asta): quando è true, il pulsante di pausa del chiamante non viene
+  // più mostrato a lui.
+  callerPauseUsed: boolean;
   onMeRefresh: () => void;
   onGlobalRefresh: () => void;
 }
@@ -44,11 +49,13 @@ export function CallStage({
   players,
   now,
   me,
+  callerPauseUsed,
   onMeRefresh,
   onGlobalRefresh,
 }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [pauseBusy, setPauseBusy] = useState(false);
   const remainingMs = useCountdown(state?.phase_end_at, now);
 
   const callerName = state?.current_caller_participant_id
@@ -87,14 +94,53 @@ export function CallStage({
     }
   }
 
+  async function handleCallerPause() {
+    if (!token) return;
+    setError(null);
+    setPauseBusy(true);
+    try {
+      await apiFetch(`/api/leagues/${code}/caller-pause`, { method: "POST", token });
+      onGlobalRefresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? messageForCallerPause(err.code) : "Errore di rete.");
+    } finally {
+      setPauseBusy(false);
+    }
+  }
+
+  async function handleCallerResume() {
+    if (!token) return;
+    setError(null);
+    setPauseBusy(true);
+    try {
+      await apiFetch(`/api/leagues/${code}/caller-resume`, { method: "POST", token });
+      onGlobalRefresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? "Non è stato possibile riprendere il countdown." : "Errore di rete.");
+    } finally {
+      setPauseBusy(false);
+    }
+  }
+
   if (!state) return null;
 
   if (state.phase === "PAUSED") {
+    const isMyCallerPause = !!myParticipantId && state.paused_by_caller_id === myParticipantId;
     return (
-      <Card className="p-8 text-center space-y-2">
+      <Card className="p-8 text-center space-y-3">
         <p className="text-2xl">⏸️</p>
         <h2 className="text-xl font-bold text-amber-400">ASTA IN PAUSA</h2>
-        <p className="text-sm text-slate-400">L&apos;amministratore ha sospeso l&apos;asta. Resta connesso: riprenderà a breve.</p>
+        <p className="text-sm text-slate-400">
+          {isMyCallerPause
+            ? "Hai fermato tu il countdown della tua chiamata. Riprendi quando sei pronto."
+            : "L'amministratore (o chi ha chiamato il giocatore) ha sospeso l'asta. Resta connesso: riprenderà a breve."}
+        </p>
+        {isMyCallerPause && (
+          <Button variant="success" disabled={pauseBusy} onClick={handleCallerResume}>
+            ▶️ Riprendi il countdown
+          </Button>
+        )}
+        {error && <p className="text-sm text-rose-400">{error}</p>}
       </Card>
     );
   }
@@ -153,6 +199,11 @@ export function CallStage({
 
   if ((state.phase === "BIDDING" || state.phase === "TIE_BREAK") && currentPlayer && currentRound) {
     const eligible = !myParticipantId || currentRound.eligible_participant_ids.includes(myParticipantId);
+    const canCallerPause =
+      state.phase === "BIDDING" &&
+      !!myParticipantId &&
+      state.current_caller_participant_id === myParticipantId &&
+      !callerPauseUsed;
     return (
       <Card className="p-5 space-y-5">
         <PlayerHero
@@ -164,6 +215,15 @@ export function CallStage({
           eligibleCount={currentRound.eligible_participant_ids.length}
           tieBreak={state.phase === "TIE_BREAK"}
         />
+        {canCallerPause && (
+          <div className="text-center space-y-1.5 -mt-2">
+            <Button variant="ghost" size="sm" disabled={pauseBusy} onClick={handleCallerPause}>
+              ⏸️ Ferma il countdown (una volta per tutta l&apos;asta)
+            </Button>
+            <p className="text-[11px] text-slate-500">Puoi usarlo solo qui, perché sei tu che hai chiamato questo giocatore.</p>
+          </div>
+        )}
+        {error && <p className="text-sm text-rose-400 text-center">{error}</p>}
         <DecisionList
           eligibleIds={currentRound.eligible_participant_ids}
           participatingIds={currentRound.participating_participant_ids}
@@ -214,4 +274,17 @@ function messageForPass(code: string): string {
   if (code === "PASS_LIMIT_REACHED") return "Hai raggiunto il limite massimo di pass consecutivi: devi chiamare un giocatore.";
   if (code === "NOT_YOUR_TURN") return "Non è il tuo turno.";
   return "Non è stato possibile passare il turno.";
+}
+
+function messageForCallerPause(code: string): string {
+  switch (code) {
+    case "PAUSE_ALREADY_USED":
+      return "Hai già usato il tuo gettone per fermare il countdown in questa asta.";
+    case "NOT_CALLER":
+      return "Puoi fermare il countdown solo quando sei tu ad aver chiamato il giocatore.";
+    case "INVALID_PHASE":
+      return "Puoi fermare il countdown solo mentre le offerte sono aperte.";
+    default:
+      return "Non è stato possibile fermare il countdown.";
+  }
 }
