@@ -5,6 +5,7 @@ import { Card } from "./ui/Card";
 import { Button } from "./ui/Button";
 import { PlayerHero } from "./PlayerHero";
 import { BiddingPanel } from "./BiddingPanel";
+import { DecisionList } from "./DecisionList";
 import { ResultBanner } from "./ResultBanner";
 import { PlayersList } from "./PlayersList";
 import { useCountdown } from "@/hooks/useCountdown";
@@ -163,6 +164,12 @@ export function CallStage({
           eligibleCount={currentRound.eligible_participant_ids.length}
           tieBreak={state.phase === "TIE_BREAK"}
         />
+        <DecisionList
+          eligibleIds={currentRound.eligible_participant_ids}
+          participatingIds={currentRound.participating_participant_ids}
+          declinedIds={currentRound.declined_participant_ids}
+          participants={participants}
+        />
         {token && (
           <BiddingPanel
             code={code}
@@ -171,6 +178,7 @@ export function CallStage({
             eligible={eligible}
             roleAvailable={me?.roleAvailable ?? null}
             maxBid={me?.maxBid ?? null}
+            minBid={currentRound.round_number === 1 ? (currentPlayer.quotazione ?? 0) + 1 : null}
             myBid={me?.myBid ?? null}
             locked={remainingMs !== null && remainingMs <= 0}
             onSubmitted={onMeRefresh}

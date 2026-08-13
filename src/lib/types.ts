@@ -98,10 +98,12 @@ export interface BidRound {
   caller_participant_id: string;
   round_number: number;
   eligible_participant_ids: string[];
-  // Id di chi ha risposto "partecipo" finora sul round corrente (mai gli
-  // importi): usato dallo schermo per il proiettore per mostrare i nomi
-  // di chi sta partecipando alla busta, prima ancora della chiusura.
+  // Id di chi ha risposto "partecipo"/"non partecipo" finora sul round
+  // corrente (mai gli importi): usati per mostrare, prima che parta il
+  // countdown, chi partecipa e chi non partecipa (dashboard e schermo
+  // per il proiettore). Chi non è in nessuno dei due è ancora in attesa.
   participating_participant_ids: string[];
+  declined_participant_ids: string[];
   started_at: string;
   // null = countdown non ancora avviato: in attesa che tutti gli aventi
   // diritto rispondano partecipo/non partecipo (vedi decision_deadline_at

@@ -11,12 +11,16 @@ interface Props {
   eligible: boolean;
   roleAvailable: boolean | null;
   maxBid: number | null;
+  // Prezzo minimo (quotazione da Excel + 1 alla chiamata principale,
+  // altrimenti l'incremento minimo di spareggio): solo un aiuto in UI,
+  // il vincolo vero è comunque applicato lato server.
+  minBid?: number | null;
   myBid: { decision: string; amount: number | null } | null;
   locked: boolean; // timer scaduto lato client (guardia soft, il server è comunque l'autorità)
   onSubmitted: () => void;
 }
 
-export function BiddingPanel({ code, token, roundId, eligible, roleAvailable, maxBid, myBid, locked, onSubmitted }: Props) {
+export function BiddingPanel({ code, token, roundId, eligible, roleAvailable, maxBid, minBid, myBid, locked, onSubmitted }: Props) {
   const [decision, setDecision] = useState<"partecipo" | "non_partecipo" | null>(
     (myBid?.decision as "partecipo" | "non_partecipo") || null
   );
@@ -47,6 +51,11 @@ export function BiddingPanel({ code, token, roundId, eligible, roleAvailable, ma
         const n = Math.trunc(Number(amount));
         if (Number.isNaN(n) || n < 0) {
           setError("Inserisci un importo valido.");
+          setSubmitting(false);
+          return;
+        }
+        if (minBid != null && n < minBid) {
+          setError(`L'offerta minima per questo giocatore è ${minBid} crediti.`);
           setSubmitting(false);
           return;
         }
@@ -104,14 +113,18 @@ export function BiddingPanel({ code, token, roundId, eligible, roleAvailable, ma
           <input
             type="number"
             inputMode="numeric"
-            min={0}
+            min={minBid ?? 0}
             max={maxBid ?? undefined}
             value={amount}
             disabled={locked || submitting}
             onChange={(e) => setAmount(e.target.value)}
             className="w-full text-center text-3xl font-black rounded-xl bg-slate-800 border border-slate-700 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
           />
-          {maxBid !== null && <p className="text-center text-xs text-slate-400">Offerta massima: {maxBid}</p>}
+          <p className="text-center text-xs text-slate-400">
+            {minBid != null && `Offerta minima: ${minBid}`}
+            {minBid != null && maxBid !== null && " · "}
+            {maxBid !== null && `Offerta massima: ${maxBid}`}
+          </p>
           <Button
             variant="success"
             className="w-full"
@@ -137,7 +150,12 @@ export function BiddingPanel({ code, token, roundId, eligible, roleAvailable, ma
 
 function messageFor(code: string, fallback: string): string {
   if (code.startsWith("AMOUNT_TOO_HIGH")) return "L'offerta supera il massimo consentito.";
-  if (code.startsWith("AMOUNT_TOO_LOW")) return "L'offerta di spareggio deve essere almeno pari (o superiore) al valore precedente.";
+  if (code.startsWith("AMOUNT_TOO_LOW")) {
+    const min = Number(fallback);
+    return Number.isFinite(min) && min > 0
+      ? `L'offerta minima per questo giocatore è ${min} crediti.`
+      : "L'offerta è inferiore al minimo consentito.";
+  }
   switch (code) {
     case "ROLE_FULL":
       return "Hai già completato gli slot per questo ruolo.";
