@@ -77,7 +77,6 @@ export default function DashboardPage({ params }: { params: Promise<{ code: stri
             players={players}
             now={now}
             me={meData ? { myBid: meData.myBid, maxBid: meData.maxBid, roleAvailable: meData.roleAvailable } : null}
-            callerPauseUsed={participant.caller_pause_used}
             onMeRefresh={refreshMe}
             onGlobalRefresh={() => {
               refreshAll();
