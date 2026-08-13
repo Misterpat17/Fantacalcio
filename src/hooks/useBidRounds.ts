@@ -35,19 +35,27 @@ export function useBidRounds(leagueId: string | null) {
 
   useEffect(() => {
     if (!leagueId) return;
-    const unsub = subscribeLeagueTable("bid_rounds", leagueId, ({ eventType, new: row, old }) => {
-      setBidRounds((prev) => {
-        if (eventType === "DELETE") {
-          return prev.filter((r) => r.id !== (old as { id: string })?.id);
-        }
-        const incoming = row as unknown as ReportBidRound;
-        const idx = prev.findIndex((r) => r.id === incoming.id);
-        if (idx === -1) return [...prev, incoming];
-        const copy = [...prev];
-        copy[idx] = incoming;
-        return copy;
-      });
-    });
+    // "storico": nome di canale distinto da quello che useAuctionState usa
+    // per la stessa tabella/lega — vedi commento in realtime.ts.
+    const unsub = subscribeLeagueTable(
+      "bid_rounds",
+      leagueId,
+      ({ eventType, new: row, old }) => {
+        setBidRounds((prev) => {
+          if (eventType === "DELETE") {
+            return prev.filter((r) => r.id !== (old as { id: string })?.id);
+          }
+          const incoming = row as unknown as ReportBidRound;
+          const idx = prev.findIndex((r) => r.id === incoming.id);
+          if (idx === -1) return [...prev, incoming];
+          const copy = [...prev];
+          copy[idx] = incoming;
+          return copy;
+        });
+      },
+      "league_id",
+      "storico"
+    );
     return unsub;
   }, [leagueId]);
 
