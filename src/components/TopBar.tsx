@@ -33,6 +33,9 @@ export function TopBar({
   const links = [
     { href: `/league/${code}/dashboard`, label: "Asta" },
     { href: `/league/${code}/classifica`, label: "Classifica" },
+    { href: `/league/${code}/budget`, label: "Budget" },
+    { href: `/league/${code}/rose`, label: "Rose" },
+    { href: `/league/${code}/storico`, label: "Storico" },
     ...(isAdmin ? [{ href: `/league/${code}/admin`, label: "Admin" }] : []),
   ];
 
