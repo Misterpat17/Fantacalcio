@@ -88,6 +88,7 @@ export function handleRouteError(err: unknown) {
       NOT_YOUR_PAUSE: 403,
       PARTICIPANT_NOT_FOUND: 404,
       STATE_NOT_FOUND: 404,
+      DECISION_LOCKED: 409,
     };
     const status = statusByCode[err.code] || 400;
     return jsonError(status, err.code, err.detail);

@@ -64,10 +64,6 @@ export interface Participant {
   consecutive_passes: number;
   connected: boolean;
   last_seen: string | null;
-  // "Gettone" personale, uno per tutta l'asta: true appena usato una
-  // volta per fermare il countdown mentre chiamava un giocatore, non si
-  // ricarica più.
-  caller_pause_used: boolean;
 }
 
 export interface Player {
@@ -124,6 +120,10 @@ export interface BidRound {
   revealed_bids: { participant_id: string; decision: string; amount: number | null }[] | null;
   winner_participant_id: string | null;
   winner_amount: number | null;
+  // Gettone del chiamante per QUESTA chiamata (si ricarica ad ogni
+  // nuova chiamata, non è un limite per tutta l'asta): true appena chi
+  // ha chiamato questo giocatore ha già fermato una volta il countdown.
+  caller_pause_used: boolean;
 }
 
 export interface RosterEntry {
