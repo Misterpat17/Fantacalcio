@@ -23,7 +23,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ code
       sb
         .from("participants")
         .select(
-          "id, display_name, turn_order, is_admin, is_player, credits_current, consecutive_passes, connected, last_seen, caller_pause_used"
+          "id, display_name, turn_order, is_admin, is_player, credits_current, consecutive_passes, connected, last_seen"
         )
         .eq("league_id", league.id)
         .order("turn_order", { ascending: true, nullsFirst: false }),
@@ -39,7 +39,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ code
     if (state?.current_round_id) {
       const { data } = await sb
         .from("bid_rounds")
-        .select("id, round_number, eligible_participant_ids, participating_participant_ids, declined_participant_ids, started_at, ends_at, status, responded_count, participating_count, winner_participant_id, winner_amount, revealed_bids")
+        .select(
+          "id, round_number, eligible_participant_ids, participating_participant_ids, declined_participant_ids, started_at, ends_at, status, responded_count, participating_count, winner_participant_id, winner_amount, revealed_bids, caller_pause_used"
+        )
         .eq("id", state.current_round_id)
         .maybeSingle();
       currentRound = data;
