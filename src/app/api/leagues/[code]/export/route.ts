@@ -153,10 +153,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ code
     }
 
     // ---------------------------------------------------------------
-    // Foglio "Storico": una riga per ogni giocatore chiamato durante
-    // l'asta, con l'offerta di ciascun partecipante (rivelate solo a
-    // round chiuso: mai un round ancora aperto). Se un giocatore è
-    // andato allo spareggio, l'offerta dei pari-merito è quella
+    // Foglio "Storico": una riga per ogni giocatore EFFETTIVAMENTE
+    // AGGIUDICATO (venduto a qualcuno) durante l'asta — i giocatori
+    // chiamati ma senza offerte, o le cui buste sono ancora aperte, non
+    // compaiono qui — con l'offerta di ciascun partecipante (rivelate
+    // solo a round chiuso: mai un round ancora aperto). Se un giocatore
+    // è andato allo spareggio, l'offerta dei pari-merito è quella
     // dell'ultimo round di spareggio; gli altri restano quelli del
     // round principale.
     // ---------------------------------------------------------------
@@ -194,6 +196,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ code
         if (rr.status === "RESOLVED") finalRound = rr;
       }
 
+      // Non aggiudicato (nessuna offerta, oppure busta/spareggio ancora
+      // apertə): non è un giocatore "aggiudicato", quindi non entra in
+      // questo foglio.
+      if (!finalRound?.winner_participant_id) continue;
+
       const row: (string | number)[] = [player.nome, RUOLO_LABEL[player.ruolo as Ruolo], player.squadra || ""];
       for (const p of playingParticipants) {
         const decision = decisionByParticipant.get(p.id);
@@ -201,10 +208,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ code
         else if (decision === "non_partecipo") row.push("—");
         else row.push("");
       }
-      const winnerName = finalRound?.winner_participant_id
-        ? participantsById.get(finalRound.winner_participant_id)?.display_name || "?"
-        : "Nessuna offerta";
-      row.push(winnerName, finalRound?.winner_amount ?? "");
+      const winnerName = participantsById.get(finalRound.winner_participant_id)?.display_name || "?";
+      row.push(winnerName, finalRound.winner_amount ?? "");
 
       storicoEntries.push({ row, sortKey: sortedRounds[0]?.created_at || "" });
     }
