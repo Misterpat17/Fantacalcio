@@ -22,7 +22,7 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
   }
 );
 
-export const Select = forwardRef<
+export const Select = forwardRef
   HTMLSelectElement,
   SelectHTMLAttributes<HTMLSelectElement> & { label?: string; children: ReactNode }
 >(function Select({ label, className = "", id, children, ...props }, ref) {
