@@ -19,7 +19,7 @@ const SIZE_CLASSES: Record<Size, string> = {
   lg: "px-6 py-3.5 text-base",
 };
 
-export const Button = forwardRef<
+export const Button = forwardRef
   HTMLButtonElement,
   ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; size?: Size }
 >(function Button({ variant = "primary", size = "md", className = "", disabled, ...props }, ref) {
