@@ -28,11 +28,6 @@ interface Props {
     maxBid: number | null;
     roleAvailable: boolean | null;
   } | null;
-  // Se il partecipante loggato ha già usato il suo gettone personale per
-  // fermare il countdown mentre chiamava un giocatore (uno per tutta
-  // l'asta): quando è true, il pulsante di pausa del chiamante non viene
-  // più mostrato a lui.
-  callerPauseUsed: boolean;
   onMeRefresh: () => void;
   onGlobalRefresh: () => void;
 }
@@ -49,7 +44,6 @@ export function CallStage({
   players,
   now,
   me,
-  callerPauseUsed,
   onMeRefresh,
   onGlobalRefresh,
 }: Props) {
@@ -203,7 +197,7 @@ export function CallStage({
       state.phase === "BIDDING" &&
       !!myParticipantId &&
       state.current_caller_participant_id === myParticipantId &&
-      !callerPauseUsed;
+      !currentRound.caller_pause_used;
     return (
       <Card className="p-5 space-y-5">
         <PlayerHero
@@ -218,7 +212,7 @@ export function CallStage({
         {canCallerPause && (
           <div className="text-center space-y-1.5 -mt-2">
             <Button variant="ghost" size="sm" disabled={pauseBusy} onClick={handleCallerPause}>
-              ⏸️ Ferma il countdown (una volta per tutta l&apos;asta)
+              ⏸️ Ferma il countdown (una volta per questa chiamata)
             </Button>
             <p className="text-[11px] text-slate-500">Puoi usarlo solo qui, perché sei tu che hai chiamato questo giocatore.</p>
           </div>
@@ -241,6 +235,7 @@ export function CallStage({
             minBid={currentRound.round_number === 1 ? (currentPlayer.quotazione ?? 0) + 1 : null}
             myBid={me?.myBid ?? null}
             locked={remainingMs !== null && remainingMs <= 0}
+            countdownStarted={remainingMs !== null}
             onSubmitted={onMeRefresh}
           />
         )}
@@ -279,7 +274,7 @@ function messageForPass(code: string): string {
 function messageForCallerPause(code: string): string {
   switch (code) {
     case "PAUSE_ALREADY_USED":
-      return "Hai già usato il tuo gettone per fermare il countdown in questa asta.";
+      return "Hai già usato il gettone per fermare il countdown di questa chiamata.";
     case "NOT_CALLER":
       return "Puoi fermare il countdown solo quando sei tu ad aver chiamato il giocatore.";
     case "INVALID_PHASE":

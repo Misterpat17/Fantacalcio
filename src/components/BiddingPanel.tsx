@@ -17,10 +17,27 @@ interface Props {
   minBid?: number | null;
   myBid: { decision: string; amount: number | null } | null;
   locked: boolean; // timer scaduto lato client (guardia soft, il server è comunque l'autorità)
+  // true da quando il countdown è partito (tutti hanno risposto): da
+  // qui in poi la scelta partecipo/non-partecipo è definitiva e non si
+  // può più cambiare (si può solo, se già "partecipo", modificare
+  // l'importo). Il server applica lo stesso vincolo in fn_submit_bid.
+  countdownStarted: boolean;
   onSubmitted: () => void;
 }
 
-export function BiddingPanel({ code, token, roundId, eligible, roleAvailable, maxBid, minBid, myBid, locked, onSubmitted }: Props) {
+export function BiddingPanel({
+  code,
+  token,
+  roundId,
+  eligible,
+  roleAvailable,
+  maxBid,
+  minBid,
+  myBid,
+  locked,
+  countdownStarted,
+  onSubmitted,
+}: Props) {
   const [decision, setDecision] = useState<"partecipo" | "non_partecipo" | null>(
     (myBid?.decision as "partecipo" | "non_partecipo") || null
   );
@@ -55,6 +72,12 @@ export function BiddingPanel({ code, token, roundId, eligible, roleAvailable, ma
       </div>
     );
   }
+
+  // Countdown già partito (tutti hanno risposto): la scelta registrata
+  // sul server è definitiva, non si può più passare da "non partecipo"
+  // a "partecipo" (né il contrario) — si può solo, restando
+  // "partecipo", cambiare l'importo dell'offerta.
+  const decisionLockedByCountdown = countdownStarted && myBid?.decision != null;
 
   async function submit(finalDecision: "partecipo" | "non_partecipo") {
     setError(null);
@@ -104,7 +127,9 @@ export function BiddingPanel({ code, token, roundId, eligible, roleAvailable, ma
       <div className="grid grid-cols-2 gap-3">
         <Button
           variant={decision === "partecipo" ? "success" : "ghost"}
-          disabled={locked || submitting || roleAvailable === false}
+          disabled={
+            locked || submitting || roleAvailable === false || (decisionLockedByCountdown && myBid?.decision !== "partecipo")
+          }
           onClick={() => {
             userEditedRef.current = true;
             setDecision("partecipo");
@@ -114,7 +139,7 @@ export function BiddingPanel({ code, token, roundId, eligible, roleAvailable, ma
         </Button>
         <Button
           variant={decision === "non_partecipo" ? "danger" : "ghost"}
-          disabled={locked || submitting}
+          disabled={locked || submitting || (decisionLockedByCountdown && myBid?.decision !== "non_partecipo")}
           onClick={() => {
             userEditedRef.current = true;
             setDecision("non_partecipo");
@@ -124,6 +149,13 @@ export function BiddingPanel({ code, token, roundId, eligible, roleAvailable, ma
           ❌ NON PARTECIPO
         </Button>
       </div>
+
+      {decisionLockedByCountdown && (
+        <p className="text-center text-[11px] text-slate-500">
+          Il countdown è partito: la tua scelta partecipo/non partecipo è definitiva
+          {decision === "partecipo" ? " (puoi ancora modificare l'importo qui sotto)." : "."}
+        </p>
+      )}
 
       {decision === "partecipo" && (
         <div className="space-y-2 fade-in-up">
@@ -182,6 +214,8 @@ function messageFor(code: string, fallback: string): string {
       return "Il tempo per questa chiamata è terminato.";
     case "NOT_ELIGIBLE":
       return "Non puoi partecipare a questo spareggio.";
+    case "DECISION_LOCKED":
+      return "Il countdown è partito: non puoi più cambiare la tua scelta partecipo/non partecipo.";
     default:
       return fallback;
   }
