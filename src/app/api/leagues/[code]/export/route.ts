@@ -2,27 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { handleRouteError, jsonError } from "@/lib/apiResponse";
-import { RUOLO_LABEL, Ruolo } from "@/lib/types";
-
-interface RevealedBid {
-  participant_id: string;
-  decision: string;
-  amount: number | null;
-}
-
-interface BidRoundRow {
-  player_id: string;
-  round_number: number;
-  status: string;
-  revealed_bids: RevealedBid[] | null;
-  winner_participant_id: string | null;
-  winner_amount: number | null;
-  created_at: string;
-}
+import { buildBudget, buildColumnLabels, buildRiepilogo, buildRose, buildStorico, ReportBidRound } from "@/lib/reportData";
 
 // Esporta rose complete, crediti spesi/rimanenti (anche in formato
 // "matrice budget") e lo storico completo delle offerte di ogni asta
-// giocatore, in un unico file Excel multi-foglio.
+// giocatore, in un unico file Excel multi-foglio. Stessa identica logica
+// di calcolo delle viste a schermo Budget/Rose/Storico (src/lib/reportData.ts):
+// qui viene solo convertita in fogli Excel.
 export async function GET(req: NextRequest, { params }: { params: Promise<{ code: string }> }) {
   try {
     const { code } = await params;
@@ -49,173 +35,40 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ code
         .order("round_number", { ascending: true }),
     ]);
 
-    const bidRounds = (bidRoundsRaw || []) as BidRoundRow[];
+    const bidRounds = (bidRoundsRaw || []) as ReportBidRound[];
     const playersById = new Map((players || []).map((p) => [p.id, p]));
     const participantsById = new Map((participants || []).map((p) => [p.id, p]));
     const playingParticipants = (participants || []).filter((p) => p.is_player);
+    const labelByParticipantId = buildColumnLabels(playingParticipants);
 
-    // Etichette colonna univoche: da quando l'accesso è per account reali,
-    // due partecipanti diversi possono avere lo stesso nome visualizzato
-    // (il vincolo di unicità è stato rimosso). Disambiguiamo solo per le
-    // intestazioni di queste due tabelle a matrice.
-    const nameCounts = new Map<string, number>();
-    for (const p of playingParticipants) nameCounts.set(p.display_name, (nameCounts.get(p.display_name) || 0) + 1);
-    const seen = new Map<string, number>();
-    function columnLabel(displayName: string): string {
-      if ((nameCounts.get(displayName) || 0) <= 1) return displayName;
-      const n = (seen.get(displayName) || 0) + 1;
-      seen.set(displayName, n);
-      return `${displayName} (${n})`;
-    }
-    const labelByParticipantId = new Map(playingParticipants.map((p) => [p.id, columnLabel(p.display_name)]));
+    const riepilogoRows = buildRiepilogo(league, playingParticipants, rosters || [], playersById);
+    const roseRows = buildRose(rosters || [], participantsById, playersById);
+    const budget = buildBudget(league, playingParticipants, rosters || [], playersById, labelByParticipantId);
+    const storico = buildStorico(playingParticipants, playersById, participantsById, bidRounds, labelByParticipantId);
 
     // ---------------------------------------------------------------
-    // Foglio "Rose"
-    // ---------------------------------------------------------------
-    const roseRows = (rosters || [])
-      .map((r) => {
-        const player = playersById.get(r.player_id);
-        const participant = participantsById.get(r.participant_id);
-        return {
-          Partecipante: participant?.display_name || "?",
-          Ruolo: player ? RUOLO_LABEL[player.ruolo as Ruolo] : "?",
-          Giocatore: player?.nome || "?",
-          Squadra: player?.squadra || "",
-          Prezzo: r.price,
-          "Data acquisto": r.purchased_at,
-        };
-      })
-      .sort((a, b) => a.Partecipante.localeCompare(b.Partecipante) || a.Ruolo.localeCompare(b.Ruolo));
-
-    // ---------------------------------------------------------------
-    // Foglio "Riepilogo crediti e rose"
-    // ---------------------------------------------------------------
-    const riepilogoRows = playingParticipants.map((p) => {
-      const mine = (rosters || []).filter((r) => r.participant_id === p.id);
-      const speso = mine.reduce((sum, r) => sum + r.price, 0);
-      const count = (ruolo: Ruolo) => mine.filter((r) => playersById.get(r.player_id)?.ruolo === ruolo).length;
-      return {
-        Partecipante: p.display_name,
-        "Crediti iniziali": league.credits_iniziali,
-        "Crediti spesi": speso,
-        "Crediti rimanenti": p.credits_current,
-        Portieri: count("P"),
-        Difensori: count("D"),
-        Centrocampisti: count("C"),
-        Attaccanti: count("A"),
-        "Totale giocatori": mine.length,
-      };
-    });
-
-    // ---------------------------------------------------------------
-    // Foglio "Budget": una colonna per squadra, righe organizzate per
-    // ruolo secondo gli slot configurati in questa lega (P/D/C/A), con
-    // il giocatore acquistato in quello slot e il relativo prezzo.
+    // Foglio "Budget" -> aoa (una colonna per squadra, righe per ruolo)
     // ---------------------------------------------------------------
     const budgetAoa: (string | number)[][] = [];
-    budgetAoa.push(["", ...playingParticipants.map((p) => labelByParticipantId.get(p.id) || p.display_name)]);
-    budgetAoa.push(["Crediti iniziali", ...playingParticipants.map(() => league.credits_iniziali)]);
-    budgetAoa.push([
-      "Crediti spesi",
-      ...playingParticipants.map((p) => (rosters || []).filter((r) => r.participant_id === p.id).reduce((s, r) => s + r.price, 0)),
-    ]);
-    budgetAoa.push(["Crediti rimanenti", ...playingParticipants.map((p) => p.credits_current)]);
+    budgetAoa.push(["", ...budget.participantLabels]);
+    budgetAoa.push(["Crediti iniziali", ...budget.creditiIniziali]);
+    budgetAoa.push(["Crediti spesi", ...budget.creditiSpesi]);
+    budgetAoa.push(["Crediti rimanenti", ...budget.creditiRimanenti]);
     budgetAoa.push([]);
-
-    const roleBlocks: { label: string; ruolo: Ruolo; slots: number }[] = [
-      { label: "PORTIERI", ruolo: "P", slots: league.slots_p },
-      { label: "DIFENSORI", ruolo: "D", slots: league.slots_d },
-      { label: "CENTROCAMPISTI", ruolo: "C", slots: league.slots_c },
-      { label: "ATTACCANTI", ruolo: "A", slots: league.slots_a },
-    ];
-
-    for (const block of roleBlocks) {
+    for (const block of budget.blocks) {
       budgetAoa.push([`${block.label} (x${block.slots})`]);
-      const byParticipant = new Map(
-        playingParticipants.map((p) => {
-          const mine = (rosters || [])
-            .filter((r) => r.participant_id === p.id && playersById.get(r.player_id)?.ruolo === block.ruolo)
-            .map((r) => ({ nome: playersById.get(r.player_id)?.nome || "?", price: r.price }))
-            .sort((a, b) => b.price - a.price);
-          return [p.id, mine] as const;
-        })
-      );
-      for (let i = 0; i < block.slots; i++) {
-        const row: (string | number)[] = [`${block.ruolo}${i + 1}`];
-        for (const p of playingParticipants) {
-          const mine = byParticipant.get(p.id) || [];
-          const entry = mine[i];
-          row.push(entry ? `${entry.nome} (${entry.price})` : "");
-        }
-        budgetAoa.push(row);
-      }
+      block.rows.forEach((row, i) => budgetAoa.push([`${block.ruolo}${i + 1}`, ...row]));
       budgetAoa.push([]);
     }
 
     // ---------------------------------------------------------------
-    // Foglio "Storico": una riga per ogni giocatore EFFETTIVAMENTE
-    // AGGIUDICATO (venduto a qualcuno) durante l'asta — i giocatori
-    // chiamati ma senza offerte, o le cui buste sono ancora aperte, non
-    // compaiono qui — con l'offerta di ciascun partecipante (rivelate
-    // solo a round chiuso: mai un round ancora aperto). Se un giocatore
-    // è andato allo spareggio, l'offerta dei pari-merito è quella
-    // dell'ultimo round di spareggio; gli altri restano quelli del
-    // round principale.
+    // Foglio "Storico" -> aoa (solo giocatori effettivamente aggiudicati)
     // ---------------------------------------------------------------
-    const roundsByPlayer = new Map<string, BidRoundRow[]>();
-    for (const r of bidRounds) {
-      const list = roundsByPlayer.get(r.player_id) || [];
-      list.push(r);
-      roundsByPlayer.set(r.player_id, list);
-    }
-
-    const storicoHeader = [
-      "Giocatore",
-      "Ruolo",
-      "Squadra",
-      ...playingParticipants.map((p) => labelByParticipantId.get(p.id) || p.display_name),
-      "Vincitore",
-      "Prezzo finale",
+    const storicoHeader = ["Giocatore", "Ruolo", "Squadra", ...storico.participantLabels, "Vincitore", "Prezzo finale"];
+    const storicoAoa: (string | number)[][] = [
+      storicoHeader,
+      ...storico.rows.map((r) => [r.giocatore, r.ruolo, r.squadra, ...r.offerte, r.vincitore, r.prezzoFinale]),
     ];
-    const storicoEntries: { row: (string | number)[]; sortKey: string }[] = [];
-
-    for (const [playerId, roundsForPlayer] of roundsByPlayer) {
-      const player = playersById.get(playerId);
-      if (!player) continue;
-      const sortedRounds = [...roundsForPlayer].sort((a, b) => a.round_number - b.round_number);
-
-      const amountByParticipant = new Map<string, number | null>();
-      const decisionByParticipant = new Map<string, string>();
-      let finalRound: BidRoundRow | null = null;
-
-      for (const rr of sortedRounds) {
-        for (const b of rr.revealed_bids || []) {
-          decisionByParticipant.set(b.participant_id, b.decision);
-          amountByParticipant.set(b.participant_id, b.amount);
-        }
-        if (rr.status === "RESOLVED") finalRound = rr;
-      }
-
-      // Non aggiudicato (nessuna offerta, oppure busta/spareggio ancora
-      // apertə): non è un giocatore "aggiudicato", quindi non entra in
-      // questo foglio.
-      if (!finalRound?.winner_participant_id) continue;
-
-      const row: (string | number)[] = [player.nome, RUOLO_LABEL[player.ruolo as Ruolo], player.squadra || ""];
-      for (const p of playingParticipants) {
-        const decision = decisionByParticipant.get(p.id);
-        if (decision === "partecipo") row.push(amountByParticipant.get(p.id) ?? "");
-        else if (decision === "non_partecipo") row.push("—");
-        else row.push("");
-      }
-      const winnerName = participantsById.get(finalRound.winner_participant_id)?.display_name || "?";
-      row.push(winnerName, finalRound.winner_amount ?? "");
-
-      storicoEntries.push({ row, sortKey: sortedRounds[0]?.created_at || "" });
-    }
-
-    storicoEntries.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
-    const storicoAoa: (string | number)[][] = [storicoHeader, ...storicoEntries.map((e) => e.row)];
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(riepilogoRows), "Riepilogo");
